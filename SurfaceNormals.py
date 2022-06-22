@@ -3,7 +3,6 @@ import time
 import cv2 as cv
 from cv2 import threshold
 import numpy as np
-from get_intrinics import intriniscs
 import pyrealsense2 as rs
 import open3d as o3d
 
@@ -100,7 +99,6 @@ if __name__ == '__main__':
         depth_image = np.asanyarray(depth_frame.get_data())
 
         thresh_mask = depth_image <= 100000
-
         thresh_mask = thresh_mask.astype(np.uint8)
 
         
@@ -111,7 +109,7 @@ if __name__ == '__main__':
         normals = np.nan_to_num(normals)
         
         normals = (normals*255).astype(np.uint8)
-        
+
         #normals_filtered = cv.blur(normals,(13, 13))
         normals_filtered = cv.medianBlur(normals,25)
         normals_filtered = cv.bilateralFilter(normals_filtered, 13, 200, 200)
@@ -121,23 +119,20 @@ if __name__ == '__main__':
         #depth_colormap = cv.applyColorMap(cv.convertScaleAbs(depth_image, alpha=0.03), cv.COLORMAP_JET)
         #depth_colormap = cv.resize((depth_colormap*255).astype(np.uint8), dsize=(normals.shape[1], normals.shape[0]), interpolation=cv.INTER_AREA)
         
-        thresh_mask = cv.resize(thresh_mask, dsize=(normals.shape[1], normals.shape[0]), interpolation=cv.INTER_AREA)
+        #thresh_mask = cv.resize(thresh_mask, dsize=(normals.shape[1], normals.shape[0]), interpolation=cv.INTER_AREA)
         
-        thresh_mask = np.stack([thresh_mask for i in range(3)], axis=-1)
+        #thresh_mask = np.stack([thresh_mask for i in range(3)], axis=-1)
         #normals_vis[1:-1, 1:-1, :] = normals
         
         
-        normals*= thresh_mask        
+        #normals*= thresh_mask        
         
 
         #normals_filtered = (normals_filtered*255).astype(np.uint8)
-        normals_filtered*= thresh_mask        
-
-        gray = cv.cvtColor(normals_filtered, cv.COLOR_BGR2GRAY)
-        edges = cv.Canny(gray,200,300)
+        #normals_filtered*= thresh_mask        
         
-        images = np.hstack((normals, normals_filtered))
-        cv.imshow('Normals', images)
+        #images = np.hstack((normals, normals_filtered))
+        cv.imshow('Normals', normals)
         if cv.waitKey(1) == 27:
             break
 

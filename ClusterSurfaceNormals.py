@@ -179,7 +179,7 @@ if __name__ == '__main__':
 
     n_clusters = 4
 
-    
+    processing_steps = []
     # Configure depth and color streams
     init_clusters = None
     while True:
@@ -191,12 +191,17 @@ if __name__ == '__main__':
         depth_frame = frames.get_depth_frame()
         color_frame = frames.get_color_frame()
 
+        
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asarray(color_frame.get_data())
         
+
+        processing_steps.append(depth_image)
         normals =  estimate_normals(depth_image, K)
         normals = np.nan_to_num(normals)
-    
+
+
+        processing_steps.append(normals)
         thresh_mask = threshold_mask(depth_image, out_shape=(normals.shape[1], normals.shape[0]))
         #flatten threshold mask to only cluster in range pixels
         thresh_mask_flat = np.where(thresh_mask.reshape((thresh_mask.shape[0] * thresh_mask.shape[1])))
@@ -230,10 +235,16 @@ if __name__ == '__main__':
         
         cluster_left  = [(labels == left_wall).astype(np.uint8)]
         cluster_floor = [(labels == floor).astype(np.uint8)]
-        
+        colored_left  = coloredClusters(cluster_left)
+
+        processing_steps.append(colored_left)
+
         segmented_L, markers_L, num_regions_L = IP.segment_planes(cluster_left, (thresh_mask == 0).astype(np.uint8), cutoff=250)
 
+
         segmented_F, markers_F, num_regions_F = IP.segment_planes(cluster_floor, (thresh_mask == 0).astype(np.uint8), cutoff=250)
+        
+        processing_steps.append(segmented_L)
         #markers+=1
         #num_labels, labels_im = cv.connectedComponents(markers.astype(np.uint8))
        
@@ -244,12 +255,23 @@ if __name__ == '__main__':
         control_vector = normalize(np.cross(left_normal, floor_normal))
 
         colored_floor =  coloredClusters(cluster_imgs)
-        colored_left  = coloredClusters(cluster_left)
 
         color_image = cv.resize(color_image, dsize=(normals.shape[1], normals.shape[0]), interpolation=cv.INTER_AREA)
 
-        color_image[markers_L==num_regions_L[-1]] = [0,255,0]
-        color_image[markers_F==num_regions_F[-1]] = [255, 0, 0]
+        markers_F==num_regions_F[-1]
+        markers_L==num_regions_L[-1]
+        
+        idk = np.logical_xor(markers_F==num_regions_F[-1],markers_L==num_regions_L[-1])
+
+        color_image[np.logical_and(markers_L==num_regions_L[-1], idk)] = [0,255,0]
+        #color_image[np.logical_and(markers_F==num_regions_F[-1], idk)] = [255, 0, 0]
+
+        processing_steps.append(color_image)
+
+        for x in processing_steps:
+            plt.imshow(x)
+            plt.show()
+
         #combo = np.hstack((colored, colored_onlyFlorr))
         #writer.write(combined)
         cv.putText(color_image, str(np.round(control_vector, 2)),(100,100), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)

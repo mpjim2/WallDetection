@@ -13,12 +13,12 @@ def dilate_erode(frame):
 
     kernel = np.ones((7,7),np.uint8)
     small = np.ones((3,3),np.uint8)
-    opening = cv.morphologyEx(frame, cv.MORPH_OPEN, kernel)
+    opening = cv.morphologyEx(frame, cv.MORPH_OPEN, small)
     opening = cv.morphologyEx(frame, cv.MORPH_CLOSE, small)
     # sure background area
-    sure_bg = cv.dilate(opening,kernel,iterations=2)
+    sure_bg = cv.dilate(opening,kernel,iterations=3)
     # Finding sure foreground area
-    sure_fg = cv.erode(opening, kernel, iterations=1)
+    sure_fg = cv.erode(opening, kernel, iterations=2)
 
     return sure_fg, sure_bg 
 

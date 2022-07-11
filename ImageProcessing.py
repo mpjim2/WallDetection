@@ -1,41 +1,26 @@
+from cv2 import dilate
 import matplotlib.pyplot as plt
 import numpy as np 
 import pickle
 import cv2 as cv
 #from PyIP import ccn
 
-def LAB_thresholding(frame):
-    '''
-    Überführt das Bild in den LAB Farbraum und gibt Masken für 
-    rote und gelbe Bereiche im Bild zurück. 
 
-    '''
-    frame_LAB = cv.cvtColor(frame, cv.COLOR_BGR2LAB)
-
-    #r_mask = cv.inRange(frame_LAB, (0, 166, 150), (255, 255, 188))
-    r_mask = cv.inRange(frame_LAB, (0, 160, 140), (255, 255, 188))
-    y_mask = cv.inRange(frame_LAB, (0, 100, 194), (255, 255, 255))
-
-    return [r_mask, y_mask]
-
-def dilate_erode(frame, kernel_size=5):
+def dilate_erode(frame):
     '''
     
     '''
-    kernel = np.ones((kernel_size, kernel_size),np.uint8)
-    #frame = cv.morphologyEx(frame, cv.MORPH_OPEN,kernel, iterations = 2)
-    
-    #kernel = np.ones((3,3),np.uint8)
+
+    kernel = np.ones((7,7),np.uint8)
+    small = np.ones((3,3),np.uint8)
+    opening = cv.morphologyEx(frame, cv.MORPH_OPEN, kernel)
+    opening = cv.morphologyEx(frame, cv.MORPH_CLOSE, small)
     # sure background area
-    sure_bg = cv.dilate(frame,kernel,iterations=3)
-    
+    sure_bg = cv.dilate(opening,kernel,iterations=2)
     # Finding sure foreground area
-    sure_fg = cv.erode(frame, kernel, iterations=3)
-    
-    # Finding unknown region
-    sure_fg = np.uint8(sure_fg)
-    
-    return sure_fg, sure_bg  
+    sure_fg = cv.erode(opening, kernel, iterations=1)
+
+    return sure_fg, sure_bg 
 
 def combine_red_yellow(frames):
     '''
@@ -65,13 +50,13 @@ def watershed(fg, unknown, img, CC=True):
     markers = cv.watershed(img, markers.astype(np.int32))
     
     
-    img[markers == -1] = [255,255,255]
+    #img[markers == -1] = [0,0,0]
     
-    colors = [[255, 255, 255], 
+    colors = [[0, 0, 0], 
               [0, 0, 0], 
-              [0, 0, 255], 
-              [255, 51, 153], 
-              [255,0,0], 
+              [0, 255, 0], 
+              [255, 255, 255], 
+              [0,0,0], 
               [28, 249, 212], 
               [0, 102, 0], 
               [100,50,0], 
@@ -85,18 +70,18 @@ def watershed(fg, unknown, img, CC=True):
               [40,20,90]]
 
     f = np.zeros(img.shape, np.uint8)
-    for i, x in enumerate(np.unique(markers)):
+    num_regions = np.unique(markers)
+    for i, x in enumerate(num_regions):
         f[markers == x] = colors[i]
     
     
-    return f
+    return f, markers, num_regions
 
-def segment_planes(frame, thresh_mask):
+def segment_planes(frame, thresh_mask, cutoff):
     '''
     
     '''
-    
-    
+
     seg_frames = frame
     frame = np.stack([frame for _ in range(3)], axis=-1)
     
@@ -114,7 +99,11 @@ def segment_planes(frame, thresh_mask):
 
     background = np.logical_or(thresh_mask, bg_c).astype(np.uint8) 
     unknown = cv.subtract(background, (foreground>=1).astype(np.uint8))
+    
+    unknown[:cutoff, :] = 0
 
     img = watershed(foreground, unknown, frame[0].astype(np.uint8), CC=False)
 
     return img 
+
+    

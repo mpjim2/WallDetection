@@ -1,3 +1,4 @@
+from encodings import normalize_encoding
 import math
 import time
 import cv2 as cv
@@ -10,6 +11,23 @@ from sklearn.cluster import KMeans, SpectralClustering
 
 import ImageProcessing as IP 
 import matplotlib.pyplot as plt
+
+import sys
+
+import warnings
+
+
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    BLACK="\[\033[0;30m\]"
 
 def normalization(data):
    mo_chang =np.sqrt(np.multiply(data[:,:,0],data[:,:,0])+np.multiply(data[:,:,1],data[:,:,1])+np.multiply(data[:,:,2],data[:,:,2]))
@@ -60,13 +78,6 @@ def normalize_img(data):
     return data
 
 
-def gridOfImages(images):
-    
-    grid = np.block([[images[0], images[1], images[2]],
-                    [images[3], images[4], np.zeros(images[0].shape)]])
-
-    return grid
-
 def coloredClusters(images):
 
     colors = [[255, 0, 0], [0, 255, 0], [0, 0, 255], [255,255,255], [0,0,0], [28, 249, 212], [0, 102, 0]]
@@ -86,25 +97,21 @@ def make_label_img(labels, thresh_idcs, out_shape, n_clusters):
     label_img = label_img.reshape((out_shape))
     return label_img
 
-def fiveDimNormals(normals):
-    
-    ret = []
-    w, h, _ = normals.shape
 
-    for i in range(w):
-        for j in range(h):
-            x,y,z = normals[i,j]
-            ret.append((x,y,z,i,j))
-
-    return np.array(ret)
-
-if __name__ == '__main__':
+def normalize(v):
+    norm=np.linalg.norm(v)
+    if norm==0:
+        norm=np.finfo(v.dtype).eps
+    return v/norm
 
 
-    #writer= cv.VideoWriter('basicvideo.mp4', cv.VideoWriter_fourcc(*'DIVX'), 20, (478,1276))
+def clusterNormals():
 
 
-    # Configure depth and color streams
+    return 
+
+
+def initialize():
     pipeline = rs.pipeline()
     config = rs.config()
 
@@ -121,56 +128,84 @@ if __name__ == '__main__':
         print("The demo requires Depth camera with Color sensor")
         exit(0)
 
-    config.enable_stream(rs.stream.depth, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, rs.format.bgr8, 30)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
     # Start streaming
-    pipeline.start(config)
+    profile = pipeline.start(config)
 
+    depth_sensor = profile.get_device().first_depth_sensor()
+    depth_scale = depth_sensor.get_depth_scale()
+   
+    # Create an align object
+    # rs.align allows us to perform alignment of depth frames to others frames
+    # The "align_to" is the stream type to which we plan to align depth frames.
+    align_to = rs.stream.color
+    align = rs.align(align_to)
+    
     # Get stream profile and camera intrinsics
     profile = pipeline.get_active_profile()
     depth_profile = rs.video_stream_profile(profile.get_stream(rs.stream.depth))
     depth_intrinsics = depth_profile.get_intrinsics()
 
     K = intrinsic_matrix(depth_intrinsics)
+    
+    return pipeline, K, align
+
+def threshold_mask(depth_image, out_shape):
+    #threshold mask to filter out pixels that are far away and thus noisy
+    mask = depth_image <= 2000
+    #filter out "bad" pixels on the left side of the image
+    #mask[:, :25] = 0
+    #filter out top part of the image
+    #mask[:250, :] = 0
+    
+    return cv.resize(mask.astype(np.uint8), dsize=out_shape, interpolation=cv.INTER_AREA)
+
+def planeNormal(normals, markers, m):
+
+    relevant_normals = normals[markers==m] 
+    wall_normal = np.median(relevant_normals, axis=0)
+
+    return normalize(wall_normal)
+
+if __name__ == '__main__':
+
+    warnings.filterwarnings("ignore")
+
+    #writer= cv.VideoWriter('basicvideo.mp4', cv.VideoWriter_fourcc(*'DIVX'), 20, (478,1276))
+
+    pipeline, K, align = initialize()
+
     n_clusters = 4
+
+    
+    # Configure depth and color streams
     init_clusters = None
     while True:
         # Grab camera data
         # Wait for a coherent pair of frames: depth and color
         frames = pipeline.wait_for_frames()
 
+        frames = align.process(frames)
         depth_frame = frames.get_depth_frame()
         color_frame = frames.get_color_frame()
 
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asarray(color_frame.get_data())
         
-
-        #depth_image = cv.blur(depth_image, (5,5))
         normals =  estimate_normals(depth_image, K)
         normals = np.nan_to_num(normals)
+    
+        thresh_mask = threshold_mask(depth_image, out_shape=(normals.shape[1], normals.shape[0]))
+        #flatten threshold mask to only cluster in range pixels
+        thresh_mask_flat = np.where(thresh_mask.reshape((thresh_mask.shape[0] * thresh_mask.shape[1])))
         
-        
-        #normals = cv.medianBlur(normals, 3)
-        #normals = cv.blur(normals, (3,3))
-        #normals = cv.GaussianBlur(normals, (5, 5), 255)
-
-        #threshold mask to filter out pixels that are far away and thus noisy
-        thresh_mask = depth_image <= 1600
-        thresh_mask = thresh_mask.astype(np.uint8)
-        thresh_mask = cv.resize(thresh_mask, dsize=(normals.shape[1], normals.shape[0]), interpolation=cv.INTER_AREA)
-
+        #CLUSTERING
 
         
         normals *= np.stack([thresh_mask for i in range(normals.shape[-1])], axis=-1)
         normals_flat = normals.reshape((normals.shape[0] * normals.shape[1], normals.shape[-1]))
-        
-        #normas_flat_w_coords = fiveDimNormals(normals)
-
-        
-        #flatten threshold mask to only cluster in range pixels
-        thresh_mask_flat = np.where(thresh_mask.reshape((thresh_mask.shape[0] * thresh_mask.shape[1])))
         
         points2cluster = normals_flat[thresh_mask_flat]
 
@@ -183,30 +218,45 @@ if __name__ == '__main__':
         
 
         init_clusters = kmu.cluster_centers_
+        #Clustering End
+
+        #Segmentation
+        left_wall = np.argmin([np.linalg.norm(i - [-1, 0, 0]) for i in init_clusters])
+        floor     = np.argmin([np.linalg.norm(i - [0, 1, 0]) for i in init_clusters])      
         
-        print(init_clusters)
         labels = make_label_img([list(kmu.labels_)], thresh_mask_flat, (normals.shape[0], normals.shape[1]), n_clusters)
-        
         
         cluster_imgs = [(labels == i).astype(np.uint8) for i in range(n_clusters)]
         
-        #segmented = IP.segment_planes(cluster_imgs, (thresh_mask == 0).astype(np.uint8))
-
-
-        #images = gridOfImages(cluster_imgs)
-        colored =  coloredClusters(cluster_imgs)
+        cluster_left  = [(labels == left_wall).astype(np.uint8)]
+        cluster_floor = [(labels == floor).astype(np.uint8)]
         
-        plt.imshow(colored)
-        plt.show()
-        #color_image = cv.resize(color_image, dsize=(normals.shape[1], normals.shape[0]), interpolation=cv.INTER_AREA).astype(np.uint8)
+        segmented_L, markers_L, num_regions_L = IP.segment_planes(cluster_left, (thresh_mask == 0).astype(np.uint8), cutoff=250)
 
-        #combined = np.hstack([(normals * 255), colored, segmented]).astype(np.uint8)
+        segmented_F, markers_F, num_regions_F = IP.segment_planes(cluster_floor, (thresh_mask == 0).astype(np.uint8), cutoff=250)
+        #markers+=1
+        #num_labels, labels_im = cv.connectedComponents(markers.astype(np.uint8))
+       
+        left_normal = planeNormal(normals, markers_L, num_regions_L[-1])
+        floor_normal = planeNormal(normals, markers_F, num_regions_F[-1])
+
+
+        control_vector = normalize(np.cross(left_normal, floor_normal))
+
+        colored_floor =  coloredClusters(cluster_imgs)
+        colored_left  = coloredClusters(cluster_left)
+
+        color_image = cv.resize(color_image, dsize=(normals.shape[1], normals.shape[0]), interpolation=cv.INTER_AREA)
+
+        color_image[markers_L==num_regions_L[-1]] = [0,255,0]
+        color_image[markers_F==num_regions_F[-1]] = [255, 0, 0]
+        #combo = np.hstack((colored, colored_onlyFlorr))
         #writer.write(combined)
-        
-        # cv.imshow('clusters', colored)
+        cv.putText(color_image, str(np.round(control_vector, 2)),(100,100), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv.LINE_AA)
+        cv.imshow('Segmented', color_image)
 
-        # if cv.waitKey(1) == 27:
-        #     break
+        if cv.waitKey(1) == 27:
+            break
 
         
     #writer.release()

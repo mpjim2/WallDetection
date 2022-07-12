@@ -95,12 +95,13 @@ def segment_planes(frame, thresh_mask, cutoff):
         foreground += fg*((i+1)*2)
         bg_c += bg
 
+    #only pixels that are background for all channels are background
     (bg_c == l).astype(np.uint8)
 
     background = np.logical_or(thresh_mask, bg_c).astype(np.uint8) 
     unknown = cv.subtract(background, (foreground>=1).astype(np.uint8))
     
-    unknown[:cutoff, :] = 0
+    #unknown[:cutoff, :] = 0
 
     img = watershed(foreground, unknown, frame[0].astype(np.uint8), CC=False)
 

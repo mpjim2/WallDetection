@@ -206,9 +206,9 @@ if __name__ == '__main__':
         #flatten threshold mask to only cluster in range pixels
         thresh_mask_flat = np.where(thresh_mask.reshape((thresh_mask.shape[0] * thresh_mask.shape[1])))
         
+        print("Look at these SHAPES")
+        print(thresh_mask.shape, normals.shape)
         #CLUSTERING
-
-        
         normals *= np.stack([thresh_mask for i in range(normals.shape[-1])], axis=-1)
         normals_flat = normals.reshape((normals.shape[0] * normals.shape[1], normals.shape[-1]))
         
@@ -268,9 +268,6 @@ if __name__ == '__main__':
 
         processing_steps.append(color_image)
 
-        for x in processing_steps:
-            plt.imshow(x)
-            plt.show()
 
         #combo = np.hstack((colored, colored_onlyFlorr))
         #writer.write(combined)
